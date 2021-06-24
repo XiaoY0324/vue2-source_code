@@ -1,14 +1,14 @@
 vue2 手写
 
 # 目录结构
-\- src
-  \- observe
-    \- array.js    --------- 数组方法重写
-    \- index.js    ---------  观察者类 真正的数据劫持方法
-  \- index.js      ---------  入口文件
-  \- initMixin.js  ---------  vue 挂载init 方法
-  \- state.js      ---------  数据劫持入口
-  \- utils.js      ---------  工具方法
+- src
+  - observe
+    - array.js    --------- 数组方法重写
+    - index.js    ---------  观察者类 真正的数据劫持方法
+  - index.js      ---------  入口文件
+  - initMixin.js  ---------  vue 挂载init 方法
+  - state.js      ---------  数据劫持入口
+  - utils.js      ---------  工具方法
 
   ```js
   // @1 new Vue 会调用 _init 方法进行初始化操作
