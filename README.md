@@ -1,14 +1,14 @@
 vue2 手写
 
 # 目录结构
-- src
-  - observe
-    - array.js    // 数组方法重写
-    - index.js    // 观察者类 真正的数据劫持方法
-  - index.js      // 入口文件
-  - initMixin.js  // vue 挂载init 方法
-  - state.js      // 数据劫持入口
-  - utils.js      // 工具方法
+\- src
+  \- observe
+    \- array.js    --------- 数组方法重写
+    \- index.js    ---------  观察者类 真正的数据劫持方法
+  \- index.js      ---------  入口文件
+  \- initMixin.js  ---------  vue 挂载init 方法
+  \- state.js      ---------  数据劫持入口
+  \- utils.js      ---------  工具方法
 
   ```js
   // @1 new Vue 会调用 _init 方法进行初始化操作
@@ -21,5 +21,4 @@ vue2 手写
   // @8 赋值成一个新对象，新对象会被进行劫持，如果是数组存放新内容 push unshift 等新增的元素也会被劫持。
   // @9 通过 __ob__ 进行标识这个对象是否被监控过
   // @10 如果就是想通过索引更改数组触发更新，使用 $set 方法，该方法内部使用 splice
-  // 
   ```
