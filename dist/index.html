@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>vue2</title>
+</head>
+<body>
+  <div id="app">{{ msg }}</div>
+</body>
+<script src="./vue.js"></script>
+<script>
+  let vm = new Vue({
+    el: '#app',
+    data: function() {
+      return {
+        msg: '杨帅加油',
+        info: {
+          desp: {
+            age: 'ys'
+          } 
+        },
+        hobby: [{ a: 1 },'eat', 'sing']
+      }
+    }
+  });
+
+  // vm.msg = { a: 200 }; // set 新值重新进行劫持
+  // vm.msg.b = 100; // 修改不存在的属性 则不会更新
+
+  // vm.hobby[1] = 'say'; // 数组的下标和长度修改不会触发更新
+  // vm.hobby[0].a = 2; // 触发更新
+
+  vm.hobby.push({ b: 2 }); // 新增的 { b: 2 } 被劫持
+  vm.hobby[3].b = 200; // 触发更新
+</script>
+</html>
