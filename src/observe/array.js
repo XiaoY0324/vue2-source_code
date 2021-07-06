@@ -10,7 +10,6 @@ methods.forEach(method => {
   // 先找自己身上，找不到去原型对象上找「arrayMethod 的原型对象是 oldArrayPrototype」
   // 比如 push 方法可以传多个参数，所以这里通过扩展运算符拿到参数列表
   arrayMethod[method] = function(...args) {
-    console.log('数组的方法进行重写');
     // 调用原有数组方法
     oldArrayPrototype[method].call(this, ...args);
 

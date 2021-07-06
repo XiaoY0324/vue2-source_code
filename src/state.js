@@ -42,6 +42,4 @@ function initData(vm) {
   for (let key in data) {
     proxyFn(vm, key, '_data');
   }
-
-  console.log(data);
 }

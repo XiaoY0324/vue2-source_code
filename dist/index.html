@@ -7,7 +7,9 @@
   <title>vue2</title>
 </head>
 <body>
-  <div id="app">{{ msg }}</div>
+  <div id="app" a="1" style="color:red; background:blue;">
+    <span>hello {{ msg }} 你好呀</span>
+  </div>
 </body>
 <script src="./vue.js"></script>
 <script>
@@ -23,16 +25,8 @@
         },
         hobby: [{ a: 1 },'eat', 'sing']
       }
-    }
+    },
+    // template: '<div>1</div>'
   });
-
-  // vm.msg = { a: 200 }; // set 新值重新进行劫持
-  // vm.msg.b = 100; // 修改不存在的属性 则不会更新
-
-  // vm.hobby[1] = 'say'; // 数组的下标和长度修改不会触发更新
-  // vm.hobby[0].a = 2; // 触发更新
-
-  vm.hobby.push({ b: 2 }); // 新增的 { b: 2 } 被劫持
-  vm.hobby[3].b = 200; // 触发更新
 </script>
 </html>

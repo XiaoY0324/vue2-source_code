@@ -56,7 +56,7 @@ function defineReactive(obj, key, value) {
     },
     set(newValue) {
       if (newValue == value) return;
-      console.log('触发set方法');
+      // console.log('触发set方法');
       // 设置新值重新劫持 
       observe(newValue); 
       value = newValue;
