@@ -1,4 +1,4 @@
-import Watcher from "./observer/watch";
+import Watcher from "./observer/watcher";
 import { nextTick } from "./utils";
 import { patch } from "./vdom/patch";
 
