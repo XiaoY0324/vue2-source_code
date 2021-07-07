@@ -1,4 +1,4 @@
-import { observe } from "./observe";
+import { observe } from "./observer";
 import { isFunction } from "./utils";
 
 // 统一的数据的初始化分发

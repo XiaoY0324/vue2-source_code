@@ -7,8 +7,9 @@
   <title>vue2</title>
 </head>
 <body>
-  <div id="app" a="1" style="color:red; background:blue;">
-    <span>hello {{ msg }} 你好呀</span>
+  <div id="app">
+    <span>{{ msg }}</span>
+    <span>{{ name }}</span>
   </div>
 </body>
 <script src="./vue.js"></script>
@@ -18,15 +19,24 @@
     data: function() {
       return {
         msg: '杨帅加油',
-        info: {
-          desp: {
-            age: 'ys'
-          } 
-        },
-        hobby: [{ a: 1 },'eat', 'sing']
+        age: 'amosyang'
       }
-    },
-    // template: '<div>1</div>'
+    }
   });
+
+  setTimeout(() => {
+    vm.msg = 1;
+    vm.msg = 2;
+    vm.msg = 3;
+    vm.name = '哈哈';
+
+    // setTimeout(() => {
+    //   console.log(vm.$el);
+    // }, 0);
+      
+    vm.$nextTick(() => {
+      console.log(vm.$el);
+    });
+  }, 1000);
 </script>
 </html>

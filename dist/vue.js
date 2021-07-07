@@ -262,23 +262,233 @@
     return render;
   }
 
+  // 观察者收集器
+  // 每个属性上需要挂载一个 wacher 收集器 dep (defineReactive 方法顶部闭包方式保存)， 用来收集自己的 wachers，因为一个属性如果在多个组件用，是要多个 watcher
+  let id$1 = 0; // 为了保证唯一性，也给加个序号
+
+  class Dep {
+    constructor() {
+      this.id = id$1++;
+      this.subs = []; // 存放 watcher
+    }
+
+    depend() {
+      // Dep.target  dep 里要存放这个 watcher，watcher 要存放 dep，多对多的关系
+      if (Dep.target) {
+        // 这一步最终结果是 dep 和 wacher 是互相存
+        Dep.target.addDep(this);
+      }
+    }
+
+    addSub(watcher) {
+      this.subs.push(watcher);
+    } // 通知更新
+
+
+    notify() {
+      // 属性一改可能会更新 n 次
+      this.subs.forEach(watcher => watcher.update());
+    }
+
+  }
+
+  Dep.target = null; // 静态属性
+
+  function pushTarget(watcher) {
+    Dep.target = watcher;
+  }
+  function popTarget() {
+    Dep.target = null;
+  }
+
+  function isFunction(val) {
+    return typeof val === 'function';
+  }
+  function isObject(val) {
+    return typeof val !== 'null' && typeof val === 'object';
+  }
+  function isArray(val) {
+    return Object.prototype.toString.call(val) === '[object Array]';
+  }
+  const callbacks = [];
+  let wating = false; // 防抖
+  // 依次执行 nextTick 队列中的 callback
+
+  function flushCallbacks() {
+    callbacks.forEach(cb => cb());
+    wating = false;
+  } // 降级策略
+
+
+  function timer(cb) {
+    let timerFn = () => {};
+
+    if (Promise) {
+      timerFn = () => {
+        Promise.resolve().then(cb);
+      };
+    } else if (MutationObserver) {
+      // 微任务 监听节点变化的 api
+      let textNode = document.createTextNode(1); // 随便创建个文本节点来监听
+
+      let observe = new MutationObserver(cb); // 注册个回调
+
+      observe.observe(textNode, {
+        // 监控文本节点变化 characterData 代表文本内容
+        characterData: true
+      });
+
+      timerFn = () => {
+        textNode.textContent = 2;
+      };
+    } else if (setImmediate) {
+      // ie 才认的 api，性能略高于 setTimeout  
+      timerFn = () => {
+        setImmediate(cb);
+      };
+    } else {
+      // 再不支持 只能延时器了
+      timerFn = () => {
+        setTimeout(cb);
+      };
+    }
+
+    timerFn();
+  } // 源码中的调度器会优先调用 nextTick 方法(批量更新就调用)
+  // 所以更新 dom 的操作会先入 callbacks 队列
+
+
+  function nextTick(cb) {
+    callbacks.push(cb);
+
+    if (!wating) {
+      // vue3 不考虑兼容，这里直接 Promise.resolve.then(flushCallbacks)
+      // vue2 中考虑兼容性问题，有个降级策略
+      timer(flushCallbacks);
+      wating = true;
+    }
+  }
+
+  let queue = [];
+  let has = {}; // 存放 wacher ID，防止相同 watcher 更新多次
+
+  let pending = false; // 清空 wacher 队列，每一个 watcher 都是一次更新操作(render + patch)
+
+  function flushSchedulerQueue() {
+    console.log(queue);
+
+    for (let i = 0; i < queue.length; i++) {
+      queue[i].run(); // 更新
+    }
+
+    queue = [];
+    has = {};
+    pending = false;
+  }
+
+  function queueWatcher(watcher) {
+    let id = watcher.id;
+
+    if (has[id] == null) {
+      queue.push(watcher);
+      has[id] = true; // 开启一次异步批处理更新(防抖)
+
+      if (!pending) {
+        console.log('dom 更新 run'); // 不能使用延时器，不然我们想拿到更新后的 dom 节点，只能通过 setTimeout 去拿
+        // 而且，我们希望尽早更新，同步代码执行完毕会先执行微任务，而不想等 setTimeout
+        // setTimeout(flushSchedulerQueue, 0);
+
+        nextTick(flushSchedulerQueue);
+        pending = true;
+      }
+    }
+  }
+
+  // Dep 上挂载 watcher 的方式，之后会改
+  let id = 0; // 每 new 一次 watcher，id++
+  // 观察者类
+
+  class Watcher {
+    // exprOrFn: 可能是个表达式(计算属性)或者更新的函数(vm._update(vm._render()))
+    constructor(vm, exprOrFn, cb, options) {
+      this.vm = vm;
+      this.exprOrFn = exprOrFn;
+      this.cb = cb;
+      this.options = options;
+      this.id = id++; // watcher 类实例化计数
+
+      this.deps = []; // 防止一个模板绑定两次相同的值 存两个 dep <span> {{ msg + msg }}}</span>
+
+      this.depsId = new Set(); // render 方法会去 vm 上重新取值，生成虚拟 dom，我们这里把它重命名为 getter
+
+      this.getter = exprOrFn; // 更新函数默认执行一次，首次渲染页面(生成虚拟 dom -> diff -> 真实 dom)
+
+      this.get();
+    } // 重新取值并渲染，取值会调用 defineProperty.get 方法，我们让每个属性都能收集自己的 watcher(多对多的关系)
+    // 每个组件的渲染都会初始化一个 wacher，组件内属性跟 watcher 做绑定
+    // 每个属性可能有多个 watcher(全局的属性 msg 100 个组件使用，就会声明 100 个 wacher 实例跟 msg 做绑定)
+    // 同一个 watcher 实例可能对应 n 多属性，比如 A 组件内有 100 变量，该 watcher 会收集 100 个 dep 供后续使用
+    // 为了收集以上关系，我们声明一个 Dep 类
+
+
+    get() {
+      // console.log('dom 渲染');
+      // 注意，这里代码只有要更新页面时(getter 就是更新页面方法)，才会走
+      // 模板内绑定的变量，取值之前这里设置 Dep.target -> wacher
+      // 注意，普通的 vm.msg 取值不会走该方法，也就是普通的读取变量 Dep.target -> null
+      pushTarget(this); // 只有取值的时候，把当前 watcher 收集到当前属性的收集器 Dep 上，并渲染页面
+      // 也就是说，当前变量在模板中使用到了，才会去收集 watcher (没用到不取)
+
+      this.getter(); // 取值之后 立马清空挂载的 wacher 实例
+
+      popTarget();
+    } // 双向收集
+
+
+    addDep(dep) {
+      let id = dep.id; // 如果没存过这个 dep， 再存
+
+      if (!this.depsId.has(id)) {
+        this.depsId.add(id);
+        this.deps.push(dep);
+        dep.addSub(this);
+      }
+    } // 存起来要更新的操作，交给调度器
+
+
+    update() {
+      // 缓存 wacher，多次调用先缓存，等会儿去重一起更新。
+      // 这就是为什么 vue 的数据更新是异步的
+      queueWatcher(this);
+    } // 调度器更新实际调用的方法
+
+
+    run() {
+      // 渲染操作的更新方法，后续还有其他更新
+      this.get();
+    }
+
+  }
+
   /**
    * @description dom diff & 生成虚拟 dom 方法
-   * @param { Element | Object } el 首次为真实 dom 节点，后续为虚拟 dom 
+   * @param { Element | Object } el 根 dom 节点
    * @param { Object } vnode 虚拟 dom 对象 
    */
-  function patch(el, vnode) {
-    // 首次渲染，el 为 vm.$el 是个真实节点, 此时把 vnode 生成真实 dom，整个替换
-    if (el.nodeType == 1) {
-      const parentElm = el.parentNode; // 找到挂载节点的父节点
+  function patch(curElm, vnode) {
+    // 把 vnode 生成真实 dom，挂载节点整个替换
+    if (curElm.nodeType == 1) {
+      const parentElm = curElm.parentNode; // 找到挂载节点的父节点
 
       const newElm = createElm(vnode); // 根据虚拟节点 创建真实节点
 
-      parentElm.insertBefore(newElm, el.nextSibling); // 放在挂载节点的下一个元素
+      parentElm.insertBefore(newElm, curElm.nextSibling); // 放在挂载节点的下一个元素
 
-      parentElm.removeChild(el); // 删除掉挂载节点
+      parentElm.removeChild(curElm); // 删除掉挂载节点
+
+      return newElm; // 新的根节点返还 重新挂载到 vm.$el 上
     }
-  } // 创建真实 dom
+  } // 创建真实 dom，并插入到页面(父节点)
 
   function createElm(vnode) {
     let {
@@ -305,7 +515,6 @@
       vnode.elm = document.createTextNode(text);
     }
 
-    console.log(vnode.elm);
     return vnode.elm;
   }
 
@@ -314,32 +523,28 @@
     Vue.prototype._update = function (vdom) {
       const vm = this; // console.log(vm.$el, '_updata', vdom);
       // 既有初始化，又有更新
+      // 老节点被干掉了 使用新节点
 
-      patch(vm.$el, vdom); // diff 来啦
-    };
-  }
+      vm.$el = patch(vm.$el, vdom); // diff 来啦
+    }; // nextTick 方法
+
+
+    Vue.prototype.$nextTick = nextTick;
+  } // 后续每个组件渲染的时候都会有一个 watcher
+
   function mountComponent(vm, el) {
     // 更新函数 数据变化后 会再次调用此函数
     let updataComponent = () => {
-      // 调用 render 函数，生成虚拟 dom
-      let vdom = vm._render();
+      // 调用 render 函数，生成虚拟 dom，用虚拟 dom 生成真实 dom
+      vm._update(vm._render());
+    }; // 注掉原有更新逻辑
+    // updataComponent();
+    // 传入 true 标识着他是一个渲染 watcher，后续还会有其他 watcher，这里做个标识
 
-      console.log(vdom, '虚拟dom'); // 用虚拟 dom 生成真实 dom
 
-      vm._update(vdom);
-    };
-
-    updataComponent();
-  }
-
-  function isFunction(val) {
-    return typeof val === 'function';
-  }
-  function isObject(val) {
-    return typeof val !== 'null' && typeof val === 'object';
-  }
-  function isArray(val) {
-    return Object.prototype.toString.call(val) === '[object Array]';
+    new Watcher(vm, updataComponent, () => {
+      console.log('更新视图啦');
+    }, true);
   }
 
   // 这里不对数组原型做操作，只针对 data 中的数组，增加了一层方法拦截
@@ -388,6 +593,7 @@
       });
 
       if (isArray(val)) {
+        // 我希望数组的变化可以触发视图更新
         // 如果是 val 数组，修改原型方法 这里就不考虑兼容 ie 了
         // 这里只针对 data 中的数组，没有重写 Array.prototype 上的方法
         val.__proto__ = arrayMethod;
@@ -425,19 +631,33 @@
   function defineReactive(obj, key, value) {
     observe(value); // 递归进行劫持
 
+    let dep = new Dep(); // 给当前变量声明一个 Dep(闭包中保存)，并收集 watcher
+
     Object.defineProperty(obj, key, {
       get() {
         // 这里就形成一个闭包，每次执行 defineReactive 上下文都不会被释放
         // 所以这就是 vue2 的性能瓶颈
+        console.log(key, 'get 取值啦');
+
+        if (Dep.target) {
+          // 说明是解析模板内变量 也就是 render 执行时候用到的 vm 中变量取值
+          // console.log('渲染模板内属性', key);
+          // 模板内变量的 Dep 里收集 watcher
+          dep.depend(Dep.target);
+        }
+
         return value;
       },
 
       set(newValue) {
-        if (newValue == value) return; // console.log('触发set方法');
-        // 设置新值重新劫持 
+        if (newValue !== value) {
+          // console.log('触发set方法');
+          // 设置新值重新劫持 
+          observe(newValue);
+          value = newValue; // 每个属性的闭包中的 dep 实例
 
-        observe(newValue);
-        value = newValue;
+          dep.notify(); // 告诉当前属性存放的 watcher 执行
+        }
       }
 
     });

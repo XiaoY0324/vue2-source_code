@@ -1,20 +1,22 @@
 /**
  * @description dom diff & 生成虚拟 dom 方法
- * @param { Element | Object } el 首次为真实 dom 节点，后续为虚拟 dom 
+ * @param { Element | Object } el 根 dom 节点
  * @param { Object } vnode 虚拟 dom 对象 
  */
-export function patch(el, vnode) {
-  // 首次渲染，el 为 vm.$el 是个真实节点, 此时把 vnode 生成真实 dom，整个替换
-  if (el.nodeType == 1) {
-    const parentElm = el.parentNode; // 找到挂载节点的父节点
+export function patch(curElm, vnode) {
+  // 把 vnode 生成真实 dom，挂载节点整个替换
+  if (curElm.nodeType == 1) {
+    const parentElm = curElm.parentNode; // 找到挂载节点的父节点
     const newElm = createElm(vnode); // 根据虚拟节点 创建真实节点
 
-    parentElm.insertBefore(newElm, el.nextSibling); // 放在挂载节点的下一个元素
-    parentElm.removeChild(el); // 删除掉挂载节点
+    parentElm.insertBefore(newElm, curElm.nextSibling); // 放在挂载节点的下一个元素
+    parentElm.removeChild(curElm); // 删除掉挂载节点
+
+    return newElm; // 新的根节点返还 重新挂载到 vm.$el 上
   }
 }
 
-// 创建真实 dom
+// 创建真实 dom，并插入到页面(父节点)
 function createElm(vnode) {
   let { tag, data, children, text, vm } = vnode;
 
@@ -35,6 +37,5 @@ function createElm(vnode) {
     vnode.elm = document.createTextNode(text);
   }
 
-  console.log(vnode.elm);
   return vnode.elm;
 }

@@ -1,5 +1,6 @@
 import { isArray, isObject } from "../utils";
-import arrayMethod from "./array";
+import arrayMethod from "./array"; // 数组结束(方法重写)
+import Dep from "./dep";
 
 // 观察者类
 class Observer {
@@ -12,7 +13,7 @@ class Observer {
       enumerable: false
     });
 
-    if (isArray(val)) {
+    if (isArray(val)) { // 我希望数组的变化可以触发视图更新
       // 如果是 val 数组，修改原型方法 这里就不考虑兼容 ie 了
       // 这里只针对 data 中的数组，没有重写 Array.prototype 上的方法
       val.__proto__ = arrayMethod;
@@ -48,18 +49,31 @@ class Observer {
 //   @4 如果数据某属性不需要响应式，可以使用 Object.freeze 冻结属性「源码里会跳过 defineReactive」
 function defineReactive(obj, key, value) {
   observe(value); // 递归进行劫持
+  let dep = new Dep(); // 给当前变量声明一个 Dep(闭包中保存)，并收集 watcher
+
   Object.defineProperty(obj, key, {
     get() {
       // 这里就形成一个闭包，每次执行 defineReactive 上下文都不会被释放
       // 所以这就是 vue2 的性能瓶颈
+      console.log(key, 'get 取值啦');
+      if (Dep.target) {
+        // 说明是解析模板内变量 也就是 render 执行时候用到的 vm 中变量取值
+        // console.log('渲染模板内属性', key);
+        // 模板内变量的 Dep 里收集 watcher
+        dep.depend(Dep.target);
+      }
+      
       return value;
     },
     set(newValue) {
-      if (newValue == value) return;
-      // console.log('触发set方法');
-      // 设置新值重新劫持 
-      observe(newValue); 
-      value = newValue;
+      if (newValue !== value) {
+        // console.log('触发set方法');
+        // 设置新值重新劫持 
+        observe(newValue); 
+        value = newValue;
+        // 每个属性的闭包中的 dep 实例
+        dep.notify(); // 告诉当前属性存放的 watcher 执行
+      }
     }
   });
 }
