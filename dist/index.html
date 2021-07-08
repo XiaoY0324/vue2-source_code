@@ -8,8 +8,7 @@
 </head>
 <body>
   <div id="app">
-    <span>{{ msg }}</span>
-    <span>{{ name }}</span>
+    <span>{{ arr }}</span>
   </div>
 </body>
 <script src="./vue.js"></script>
@@ -18,25 +17,28 @@
     el: '#app',
     data: function() {
       return {
-        msg: '杨帅加油',
-        age: 'amosyang'
+        msg: 1,
+        arr: [[1, 2, 3]]
       }
     }
   });
 
-  setTimeout(() => {
-    vm.msg = 1;
-    vm.msg = 2;
-    vm.msg = 3;
-    vm.name = '哈哈';
+  // vm.arr.push('a');
+  vm.arr[0].push('4');
 
-    // setTimeout(() => {
-    //   console.log(vm.$el);
-    // }, 0);
+  // setTimeout(() => {
+  //   vm.msg = 1;
+  //   vm.msg = 2;
+  //   vm.msg = 3;
+  //   vm.name = '哈哈';
+
+  //   setTimeout(() => {
+  //     console.log(vm.$el);
+  //   }, 0);
       
-    vm.$nextTick(() => {
-      console.log(vm.$el);
-    });
-  }, 1000);
+  //   vm.$nextTick(() => {
+  //     console.log(vm.$el);
+  //   });
+  // }, 1000);
 </script>
 </html>

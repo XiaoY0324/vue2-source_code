@@ -375,8 +375,6 @@
   let pending = false; // 清空 wacher 队列，每一个 watcher 都是一次更新操作(render + patch)
 
   function flushSchedulerQueue() {
-    console.log(queue);
-
     for (let i = 0; i < queue.length; i++) {
       queue[i].run(); // 更新
     }
@@ -578,15 +576,23 @@
 
       let ob = this.__ob__; // 接着劫持 本身是个数组
 
-      if (inserted) ob.observeArray(inserted);
+      if (inserted) ob.observeArray(inserted); // 调用数组的 observer.dep 属性，触发更新
+
+      ob.dep.notify();
     };
   });
 
+  // 如果给对象新增一个属性不会触发视图更新(给对象本身也增加一个 dep，dep 中存 watcher，如果增加一个属性后，我就手动的触发 watcher 的更新)
+
   class Observer {
     constructor(val) {
-      // 给对象和数组添加一个自定义属性，用于数组新增元素时的再次劫持
+      // 给 Observer 实例增加一个 dep 属性，也就是 val.__ob__.dep
+      // 注意此时 val 可能是对象也可能是数组，数组我们是需要加的，用于调用七种方法是调用 dep.notify
+      // 对象加上也不影响，因为对象加属性是不会触发更新的(没有劫持)，而且后面实现对象 $set 需要使用到这个 dep
+      this.dep = new Dep(); // 给对象和数组添加一个自定义属性，用于数组新增元素时的再次劫持
       // 不过切记 __ob__ 属性不能被枚举，不然如果 val 是个对象的话，就会把 __ob__ 也劫持
       // 这也是我们看到所有的 Vue 变量都有 __ob__ 属性的原因
+
       Object.defineProperty(val, '__ob__', {
         value: this,
         enumerable: false
@@ -620,6 +626,19 @@
       });
     }
 
+  } // 对数组里面的数组进行依赖收集
+
+
+  function dependArray(val) {
+    for (let i = 0; i < val.length; i++) {
+      let current = val[i]; // current 是数组里面的数组
+
+      current.__ob__ && current.__ob__.dep.depend(); // 递归收集，使闭包内的 Dep 保存 wacher
+
+      if (Array.isArray(current)) {
+        dependArray(current);
+      }
+    }
   } // vue2 慢的一个原因
   // 这里引出几条 vue2 的性能优化原则
   //   @1 不要把所有的数据都放在 data 中，闭包过多会损耗性能
@@ -629,21 +648,34 @@
 
 
   function defineReactive(obj, key, value) {
-    observe(value); // 递归进行劫持
-
+    // 进行劫持(递归) 对象或数组返回 Observer 实例，普通值返回 undefined
+    let childOb = observe(value);
     let dep = new Dep(); // 给当前变量声明一个 Dep(闭包中保存)，并收集 watcher
+    // console.log(childOb, '就是当前数据 Observer 实例');
 
     Object.defineProperty(obj, key, {
       get() {
         // 这里就形成一个闭包，每次执行 defineReactive 上下文都不会被释放
         // 所以这就是 vue2 的性能瓶颈
-        console.log(key, 'get 取值啦');
-
+        // console.log(key, 'get 取值啦');
         if (Dep.target) {
           // 说明是解析模板内变量 也就是 render 执行时候用到的 vm 中变量取值
           // console.log('渲染模板内属性', key);
           // 模板内变量的 Dep 里收集 watcher
-          dep.depend(Dep.target);
+          dep.depend(); // 数组本身添加 Dep 收集 watcher 去更新(对象也会被添加 Dep，但是对象的 Dep 暂时没有使用哦)
+          // 如果 value 是个普通值，则 childOb 为 undefined
+
+          if (childOb) {
+            // 让数组和对象也记录 Dep，收集 watcher
+            childOb.dep.depend(); // 如果当前 value 个数组，需要考虑二维数组的情况，因为某个字段是多维数组，取值只触发最外层数组的一次 get
+            // 比如 hobbys -> [[1, 2, 3]]，我想让 hobbys[0].push('4') 也能更新
+            // 取外层数组要对里面的 item 也行依赖收集 
+
+            if (Array.isArray(value)) {
+              console.log(value);
+              dependArray(value);
+            }
+          }
         }
 
         return value;
@@ -666,8 +698,11 @@
   function observe(data) {
     // 如果不是对象，直接返回「非对象类型不进行递归劫持」
     if (!isObject(data)) return; // 如果被劫持过，就不再进行劫持了
+    // 劫持过的话，把上次劫持的 Oberver 对象返回
 
-    if (data.__ob__) return; // 如果一个数据被劫持过了，就不要重复劫持了，这里用类来实现
+    if (data.__ob__) {
+      return data.__ob__;
+    }
     // 劫持过的对象 把类的实例挂在到 data.__ob__
 
     return new Observer(data);

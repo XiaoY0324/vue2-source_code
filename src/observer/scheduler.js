@@ -7,7 +7,6 @@ let pending = false;
 
 // 清空 wacher 队列，每一个 watcher 都是一次更新操作(render + patch)
 function flushSchedulerQueue() {
-  console.log(queue);
   for (let i = 0; i < queue.length; i++) {
     queue[i].run(); // 更新
   }

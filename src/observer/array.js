@@ -33,6 +33,9 @@ methods.forEach(method => {
 
     // 接着劫持 本身是个数组
     if (inserted) ob.observeArray(inserted);
+
+    // 调用数组的 observer.dep 属性，触发更新
+    ob.dep.notify();
   }
 });
 
