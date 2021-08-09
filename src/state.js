@@ -1,4 +1,5 @@
 import { observe } from "./observer";
+import Watcher from "./observer/watcher";
 import { isFunction } from "./utils";
 
 // 统一的数据的初始化分发
@@ -7,6 +8,10 @@ export function initState(vm) {
 
   if (options.data) {
     initData(vm);
+  }
+
+  if (options.watch) {
+    initWatch(vm, options.watch);
   }
 }
 
@@ -41,5 +46,33 @@ function initData(vm) {
   // 这也是 vue 中我们可以用 this 访问和修改 data 中数据的原因
   for (let key in data) {
     proxyFn(vm, key, '_data');
+  }
+}
+
+function initWatch(vm, watch) {
+  for (let key in watch) {
+    let handler = watch[key];
+
+    if (Array.isArray(handler)) { // handler 为数组
+      for (let i = 0; i < handler.length; i++) { 
+        // 创建个 watcher 去监听数据变化
+        createWatcher(vm, key, handler[i]);
+      }
+    } else { // handler 为函数
+      createWatcher(vm, key, handler);
+    }
+  }
+}
+
+function createWatcher(vm, key, handler) {
+  return vm.$watch(key, handler);
+}
+
+// 把 $watch 扩展到原型上
+export function stateMixin(Vue) {
+  Vue.prototype.$watch = function(key, handler, options = {}) {
+    options.user = true; // 标识用户自己写的 watcher, 跟渲染 watcher 区分开
+
+    new Watcher(this, key, handler, options);
   }
 }

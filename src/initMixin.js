@@ -2,6 +2,19 @@
 import { compileToFunctions } from "./compiler";
 import { mountComponent } from "./lifecycle";
 import { initState } from "./state";
+import { mergeOptions } from "./utils";
+
+function callHook(vm, hook) {
+  const handlers = vm.$options[hook];
+
+  if (handlers) {
+    // 依次执行生命周期收集的钩子函数
+    for (let i = 0; i < handlers.length; i++) {
+      // 生命周期的 this 也指向当前实例，这就是为什么 vue2 中生命周期能拿到当前组件实例
+      handlers[i].call(vm); 
+    }
+  } 
+}
 
 export function initMixin(Vue) {
   // 后续组件化开发的时候，Vue.extend 可以创造一个子组件，子组件也可以调用 _init 方法
@@ -10,7 +23,11 @@ export function initMixin(Vue) {
     
     // 注意调用的时候是 实例._init, 所以这里的 this 指的是实例本身 
     // 把用户的配置放到实例上, 这样在其他方法中都可以共享 options 了
-    vm.$options = options;
+    // 同混入的 Vue.options 做合并(mixin), 注意参数顺序，组件 options 优先替换 全局 options
+    vm.$options = mergeOptions(this.constructor.options, options);
+    // console.warn(vm.$options);
+
+    callHook(vm, 'beforeCreate'); // beforeCreate 在 initState 前执行
 
     // 因为数据的来源有很多种，比如 data、props、computed 等，我们要做一个统一的数据的初始化『数据劫持』
     initState(vm);

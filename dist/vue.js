@@ -4,6 +4,133 @@
   (global = typeof globalThis !== 'undefined' ? globalThis : global || self, global.Vue = factory());
 }(this, (function () { 'use strict';
 
+  function isFunction(val) {
+    return typeof val === 'function';
+  }
+  function isObject(val) {
+    return typeof val !== 'null' && typeof val === 'object';
+  }
+  function isArray(val) {
+    return Object.prototype.toString.call(val) === '[object Array]';
+  }
+  const callbacks = [];
+  let wating = false; // 防抖
+  // 依次执行 nextTick 队列中的 callback
+
+  function flushCallbacks() {
+    callbacks.forEach(cb => cb());
+    wating = false;
+  } // 降级策略
+
+
+  function timer(cb) {
+    let timerFn = () => {};
+
+    if (Promise) {
+      timerFn = () => {
+        Promise.resolve().then(cb);
+      };
+    } else if (MutationObserver) {
+      // 微任务 监听节点变化的 api
+      let textNode = document.createTextNode(1); // 随便创建个文本节点来监听
+
+      let observe = new MutationObserver(cb); // 注册个回调
+
+      observe.observe(textNode, {
+        // 监控文本节点变化 characterData 代表文本内容
+        characterData: true
+      });
+
+      timerFn = () => {
+        textNode.textContent = 2;
+      };
+    } else if (setImmediate) {
+      // ie 才认的 api，性能略高于 setTimeout  
+      timerFn = () => {
+        setImmediate(cb);
+      };
+    } else {
+      // 再不支持 只能延时器了
+      timerFn = () => {
+        setTimeout(cb);
+      };
+    }
+
+    timerFn();
+  } // 源码中的调度器会优先调用 nextTick 方法(批量更新就调用)
+  // 所以更新 dom 的操作会先入 callbacks 队列
+
+
+  function nextTick(cb) {
+    callbacks.push(cb);
+
+    if (!wating) {
+      // vue3 不考虑兼容，这里直接 Promise.resolve.then(flushCallbacks)
+      // vue2 中考虑兼容性问题，有个降级策略
+      timer(flushCallbacks);
+      wating = true;
+    }
+  } // 策略模式，针对不同的 key 去做合并
+
+  const strats = {}; // 针对不同 key 的策略，这里写四个生命周期的合并为栗，method 等合并同理
+
+  ['beforeCreate', 'created', 'beforeMount', 'mounted'].forEach(method => {
+    strats[method] = function (curVal, mixinVal) {
+      if (mixinVal) {
+        // Vue.options 默认值为空对象，所以原始配置中 key 对应的生命周期函数这里可能是空的
+        // 首次是这样的，Vue.options = {}, options = { a, beforeCreate: function() {} }
+        // 第二次是这样的，Vue.options = { a, beforeCreate: [fn] }, options = { b, beforeCreate: function() {} }
+        if (curVal) {
+          // 函数数组进行合并
+          return curVal.concat(mixinVal);
+        } else {
+          // 公共配置没有生命周期，混入配置有，要把这些生命周期函数变为数组保存
+          return [mixinVal];
+        }
+      } else {
+        // 如果混入的 key 对应的值为空，直接使用原来的值
+        return curVal;
+      }
+    };
+  });
+  function mergeOptions(curOptions, mixinOptions) {
+    const res = {}; // 先遍历 Vue.options，如果混入 options 中该属性也存在，使用混入的变量替换
+
+    for (let key in curOptions) {
+      mergeField(key);
+    } // 再遍历混入 options，如果某属性 Vue.options 没有，拷贝过来
+
+
+    for (let key in mixinOptions) {
+      if (!curOptions.hasOwnProperty(key)) {
+        mergeField(key);
+      }
+    } // 合并配置
+
+
+    function mergeField(key) {
+      // 策略模式，针对不同的 key 进行合并(这里拿生命周期函数做示例)
+      if (strats[key]) {
+        res[key] = strats[key](curOptions[key], mixinOptions[key]);
+      } else {
+        // 优先使用新传递的属性区替换公共属性
+        res[key] = mixinOptions[key] || curOptions[key];
+      }
+    }
+
+    console.warn(res.data);
+    return res;
+  }
+
+  function initGlobalAPI(Vue) {
+    Vue.options = {}; // 所有的全局属性都会放到这个变量上
+
+    Vue.mixin = function (mixinOptions) {
+      // this 代表 Vue，静态属性 Vue.options
+      this.options = mergeOptions(this.options, mixinOptions);
+    };
+  }
+
   const defaultTagRE = /\{\{((?:.|\r?\n)+?)\}\}/g; // 匹配双花括号 {{}}
   // 数组转对象 [{ name: 'aaa', value: 'bbb' }] => { aaa: 'bbb' }
 
@@ -301,74 +428,6 @@
     Dep.target = null;
   }
 
-  function isFunction(val) {
-    return typeof val === 'function';
-  }
-  function isObject(val) {
-    return typeof val !== 'null' && typeof val === 'object';
-  }
-  function isArray(val) {
-    return Object.prototype.toString.call(val) === '[object Array]';
-  }
-  const callbacks = [];
-  let wating = false; // 防抖
-  // 依次执行 nextTick 队列中的 callback
-
-  function flushCallbacks() {
-    callbacks.forEach(cb => cb());
-    wating = false;
-  } // 降级策略
-
-
-  function timer(cb) {
-    let timerFn = () => {};
-
-    if (Promise) {
-      timerFn = () => {
-        Promise.resolve().then(cb);
-      };
-    } else if (MutationObserver) {
-      // 微任务 监听节点变化的 api
-      let textNode = document.createTextNode(1); // 随便创建个文本节点来监听
-
-      let observe = new MutationObserver(cb); // 注册个回调
-
-      observe.observe(textNode, {
-        // 监控文本节点变化 characterData 代表文本内容
-        characterData: true
-      });
-
-      timerFn = () => {
-        textNode.textContent = 2;
-      };
-    } else if (setImmediate) {
-      // ie 才认的 api，性能略高于 setTimeout  
-      timerFn = () => {
-        setImmediate(cb);
-      };
-    } else {
-      // 再不支持 只能延时器了
-      timerFn = () => {
-        setTimeout(cb);
-      };
-    }
-
-    timerFn();
-  } // 源码中的调度器会优先调用 nextTick 方法(批量更新就调用)
-  // 所以更新 dom 的操作会先入 callbacks 队列
-
-
-  function nextTick(cb) {
-    callbacks.push(cb);
-
-    if (!wating) {
-      // vue3 不考虑兼容，这里直接 Promise.resolve.then(flushCallbacks)
-      // vue2 中考虑兼容性问题，有个降级策略
-      timer(flushCallbacks);
-      wating = true;
-    }
-  }
-
   let queue = [];
   let has = {}; // 存放 wacher ID，防止相同 watcher 更新多次
 
@@ -402,26 +461,55 @@
     }
   }
 
-  // Dep 上挂载 watcher 的方式，之后会改
+  // Dep 上挂载 watcher 的方式
   let id = 0; // 每 new 一次 watcher，id++
   // 观察者类
 
   class Watcher {
-    // exprOrFn: 可能是个表达式(计算属性)或者更新的函数(vm._update(vm._render()))
+    // exprOrFn: 可能是个表达式(计算属性)或者更新的函数(vm._update(vm._render()))或字符串(watch 创建的 watcher，第二个参数是 key)
+    // options：为 true 标识它是个渲染 watcher
     constructor(vm, exprOrFn, cb, options) {
       this.vm = vm;
       this.exprOrFn = exprOrFn;
       this.cb = cb;
+      this.user = !!options.user; // 是不是用户 watcher, 取布尔值
+
       this.options = options;
       this.id = id++; // watcher 类实例化计数
 
       this.deps = []; // 防止一个模板绑定两次相同的值 存两个 dep <span> {{ msg + msg }}}</span>
 
-      this.depsId = new Set(); // render 方法会去 vm 上重新取值，生成虚拟 dom，我们这里把它重命名为 getter
+      this.depsId = new Set();
 
-      this.getter = exprOrFn; // 更新函数默认执行一次，首次渲染页面(生成虚拟 dom -> diff -> 真实 dom)
+      if (typeof exprOrFn == 'string') {
+        // watch api 的 watcher
+        // 如果是 watch: { name: handler } 走到这里，此时 exprOrFn 就是 'name'
+        // 走到下面 this.get() 方法内部时，执行 pushTarget 函数会把 Dep.target = 本次 watch 的 watcher
+        // 然后执行 this.getter 方法，我们 下面方法中 for 循环取值，这会触发取值被走 get 方法 
+        // get 方法回去收集当前 Dep.target 也就是 watch API 创建的 watcher，至此完成此类 wacter 收集
+        this.getter = function () {
+          // watcher: { "age.n": handler } 取值需要改成 vm['age']['n']
+          let path = exprOrFn.split('.'); // [age, n]
 
-      this.get();
+          let obj = vm;
+
+          for (let i = 0; i < path.length; i++) {
+            obj = obj[path[i]];
+          }
+
+          return obj;
+        };
+      } else {
+        // 渲染 watcher
+        // render 方法会去 vm 上重新取值，生成虚拟 dom，我们这里把它重命名为 getter
+        this.getter = exprOrFn;
+      } // 更新函数默认执行一次，首次渲染页面(生成虚拟 dom -> diff -> 真实 dom)
+      // this.value 代表初始的 value，也就是记录 oldValue
+      // watch api 的 watcher 会返回当前 key 对应的值，渲染 watcher 返回 undefined
+
+
+      this.value = this.get();
+      console.log(this.value, this);
     } // 重新取值并渲染，取值会调用 defineProperty.get 方法，我们让每个属性都能收集自己的 watcher(多对多的关系)
     // 每个组件的渲染都会初始化一个 wacher，组件内属性跟 watcher 做绑定
     // 每个属性可能有多个 watcher(全局的属性 msg 100 个组件使用，就会声明 100 个 wacher 实例跟 msg 做绑定)
@@ -437,9 +525,10 @@
       pushTarget(this); // 只有取值的时候，把当前 watcher 收集到当前属性的收集器 Dep 上，并渲染页面
       // 也就是说，当前变量在模板中使用到了，才会去收集 watcher (没用到不取)
 
-      this.getter(); // 取值之后 立马清空挂载的 wacher 实例
+      const value = this.getter(); // 取值之后 立马清空挂载的 wacher 实例
 
       popTarget();
+      return value;
     } // 双向收集
 
 
@@ -463,7 +552,16 @@
 
     run() {
       // 渲染操作的更新方法，后续还有其他更新
-      this.get();
+      // 更新后拿到新值
+      let newValue = this.get();
+      let oldValue = this.value;
+      this.value = newValue; // 更新 oldValue
+
+      if (this.user) {
+        // 用户自定义的 watcher 的话，调用 cb 方法，传入 oldValue 和 newValue
+        // 这个 cb 就是 watch: { name: handler } 中的 handler 啦
+        this.cb.call(this.vm, oldValue, newValue);
+      }
     }
 
   }
@@ -714,6 +812,10 @@
     if (options.data) {
       initData(vm);
     }
+
+    if (options.watch) {
+      initWatch(vm, options.watch);
+    }
   } // 代理 -> 使用 vm.info 取到 vm.data.info「劫持过的 info」
 
   function proxyFn(vm, key, source) {
@@ -747,13 +849,59 @@
     }
   }
 
+  function initWatch(vm, watch) {
+    for (let key in watch) {
+      let handler = watch[key];
+
+      if (Array.isArray(handler)) {
+        // handler 为数组
+        for (let i = 0; i < handler.length; i++) {
+          // 创建个 watcher 去监听数据变化
+          createWatcher(vm, key, handler[i]);
+        }
+      } else {
+        // handler 为函数
+        createWatcher(vm, key, handler);
+      }
+    }
+  }
+
+  function createWatcher(vm, key, handler) {
+    return vm.$watch(key, handler);
+  } // 把 $watch 扩展到原型上
+
+
+  function stateMixin(Vue) {
+    Vue.prototype.$watch = function (key, handler, options = {}) {
+      options.user = true; // 标识用户自己写的 watcher, 跟渲染 watcher 区分开
+
+      new Watcher(this, key, handler, options);
+    };
+  }
+
+  function callHook(vm, hook) {
+    const handlers = vm.$options[hook];
+
+    if (handlers) {
+      // 依次执行生命周期收集的钩子函数
+      for (let i = 0; i < handlers.length; i++) {
+        // 生命周期的 this 也指向当前实例，这就是为什么 vue2 中生命周期能拿到当前组件实例
+        handlers[i].call(vm);
+      }
+    }
+  }
+
   function initMixin(Vue) {
     // 后续组件化开发的时候，Vue.extend 可以创造一个子组件，子组件也可以调用 _init 方法
     Vue.prototype._init = function (options) {
       const vm = this; // 注意调用的时候是 实例._init, 所以这里的 this 指的是实例本身 
       // 把用户的配置放到实例上, 这样在其他方法中都可以共享 options 了
+      // 同混入的 Vue.options 做合并(mixin), 注意参数顺序，组件 options 优先替换 全局 options
 
-      vm.$options = options; // 因为数据的来源有很多种，比如 data、props、computed 等，我们要做一个统一的数据的初始化『数据劫持』
+      vm.$options = mergeOptions(this.constructor.options, options); // console.warn(vm.$options);
+
+      callHook(vm, 'beforeCreate'); // beforeCreate 在 initState 前执行
+      // 因为数据的来源有很多种，比如 data、props、computed 等，我们要做一个统一的数据的初始化『数据劫持』
 
       initState(vm);
 
@@ -854,14 +1002,18 @@
 
   function Vue(options) {
     this._init(options);
-  } // 在 Vue 原型链上扩展方法 
+  } // vue 增加静态方法，mixin 之类的
 
+
+  initGlobalAPI(Vue); // 在 Vue 原型链上扩展初始化方法(init, $mount 等)
 
   initMixin(Vue); // 原型链挂载 _render -> 生成虚拟 dom 方法
 
   renderMixin(Vue); // 原型链挂载 _update -> 生成真实 dom 方法
 
-  lifecycleMixin(Vue);
+  lifecycleMixin(Vue); // 扩展原型 $watcher 方法
+
+  stateMixin(Vue);
 
   return Vue;
 

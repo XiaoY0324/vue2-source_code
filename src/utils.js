@@ -65,3 +65,58 @@ export function nextTick(cb) {
     wating = true;
   }
 }
+
+
+// 策略模式，针对不同的 key 去做合并
+const strats = {};
+
+// 针对不同 key 的策略，这里写四个生命周期的合并为栗，method 等合并同理
+['beforeCreate', 'created', 'beforeMount', 'mounted'].forEach(method => {
+  strats[method] = function(curVal, mixinVal) {
+    if (mixinVal) {
+      // Vue.options 默认值为空对象，所以原始配置中 key 对应的生命周期函数这里可能是空的
+      // 首次是这样的，Vue.options = {}, options = { a, beforeCreate: function() {} }
+      // 第二次是这样的，Vue.options = { a, beforeCreate: [fn] }, options = { b, beforeCreate: function() {} }
+      if (curVal) { 
+        // 函数数组进行合并
+        return curVal.concat(mixinVal);
+      } else {
+        // 公共配置没有生命周期，混入配置有，要把这些生命周期函数变为数组保存
+        return [mixinVal]
+      }
+    } else {
+      // 如果混入的 key 对应的值为空，直接使用原来的值
+      return curVal; 
+    }
+  }
+});
+
+export function mergeOptions(curOptions, mixinOptions) {
+  const res = {};
+
+  // 先遍历 Vue.options，如果混入 options 中该属性也存在，使用混入的变量替换
+  for (let key in curOptions) {
+    mergeField(key);
+  }
+
+  // 再遍历混入 options，如果某属性 Vue.options 没有，拷贝过来
+  for (let key in mixinOptions) {
+    if (!curOptions.hasOwnProperty(key)) {
+      mergeField(key);
+    }
+  }
+
+  // 合并配置
+  function mergeField(key) {
+    // 策略模式，针对不同的 key 进行合并(这里拿生命周期函数做示例)
+    if (strats[key]) {
+      res[key] = strats[key](curOptions[key], mixinOptions[key]);
+    } else {
+      // 优先使用新传递的属性区替换公共属性
+      res[key] = mixinOptions[key] || curOptions[key];
+    }
+  }
+
+  console.warn(res.data);
+  return res;
+}
